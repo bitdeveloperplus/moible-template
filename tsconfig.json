@@ -4,9 +4,7 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
+      "@/*": ["./src/*"]
     },
     "esModuleInterop": true,
     "checkJs": true
@@ -14,15 +12,8 @@
   "exclude": [
     "node_modules",
     "babel.config.js",
-    "metro.config.js",
-    "docs",
-    "cli",
     "android",
-    "ios",
-    "lint-staged.config.js"
+    "ios"
   ],
-  "include": [
-    "**/*.ts",
-    "**/*.tsx"
-  ]
+  "include": ["**/*.ts", "**/*.tsx", "nativewind-env.d.ts"]
 }

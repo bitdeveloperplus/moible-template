@@ -1,0 +1,144 @@
+# Mobile template cleanup — goal and scope
+
+End state: a minimal Expo + React Native + TypeScript app that starts cleanly (Expo Go or dev client), has no product-specific logic, and is easy to fork. Prefer deleting unused code over leaving dead imports; after cleanup, run typecheck, lint, tests, and a device/simulator smoke run.
+
+Reference: current app is a full “SnapSub / SubTracker” subscription product (iCloud sync, IAP, notifications, MMKV, reports, calendar, background fetch, etc.) wired through `App.tsx`, `index.ts`, and `app.json`.
+
+---
+
+## 1. Define the empty shell (do this first)
+
+- [ ] Decide the minimal UI: e.g. single screen with app name + “Template” text, or one `src/screens/PlaceholderScreen.tsx` only.
+- [ ] Decide whether the template keeps **NativeWind + Tailwind** (`className` on views). If no: remove `nativewind`, `tailwindcss`, `postcss.config.js`, `tailwind.config.js`, `nativewind-env.d.ts`, and the NativeWind Babel plugin; restyle with `StyleSheet`.
+- [ ] Decide whether the template keeps **MMKV** (`src/lib/storage.tsx`). If no: remove `react-native-mmkv` and the storage module, or replace with `expo-secure-store` / nothing for a truly empty shell.
+- [ ] Decide **dev client vs Expo Go**: many current deps (IAP, cloud storage, MMKV, notifications) require a custom dev client or prebuild; document the chosen path in README.
+
+---
+
+## 2. Replace root app entry (`App.tsx`, `index.ts`)
+
+- [ ] Replace `App.tsx` with a minimal tree: e.g. `GestureHandlerRootView` → `SafeAreaProvider` → `View`/`Text` (and optional `StatusBar`). Remove all imports from `./src/...`, `./models/...`, and product services.
+- [ ] Remove from `index.ts` the side-effect import `./src/services/backgroundFetchService` (it registers native tasks and ties the bundle to product code).
+- [ ] Keep `import 'react-native-gesture-handler'` and `registerRootComponent(App)` as required by Expo.
+
+---
+
+## 3. Remove product domain: screens, components, hooks, context
+
+Delete (or move out of repo) everything under `src/` that is product-specific, including at least:
+
+- [ ] **Screens:** `HomeScreen`, `EmptyHomePage`, `ReportScreen`, `CalendarScreen`, `CalendarMonthGrid`, `AllSubscriptionsScreen`.
+- [ ] **Components:** all modal/cards/charts/subscription UI (`AddSubscriptionModal`, `SettingsModal`, `PurchaseProductModal`, `SubscriptionCard`, report tabs, bubbles, etc.).
+- [ ] **Hooks:** `useSubscriptions.ts`, `useNotificationPermissionBanner.ts`.
+- [ ] **Context:** `ThemeContext`, `ToastContext`, `CurrencyContext`, `PurchaseContext` — remove unless you intentionally keep a tiny theme/toast demo.
+- [ ] **Constants:** entire `src/constants/` (billing, brands, currencies, products, sync, subscription limits, theme tokens tied to app, etc.) — delete or reduce to one small `theme`/`colors` file if you keep Tailwind.
+- [ ] **Utils:** all `src/utils/*` helpers tied to subscriptions, money, charts, bubbles — delete.
+- [ ] **UI:** `src/ui/colors.js` if unused after Tailwind removal.
+- [ ] After deletions, ensure **no file** under `src/` imports deleted modules (grep for old paths).
+
+---
+
+## 4. Remove services, sync, notifications, purchases, analytics
+
+Delete the entire product service layer under `src/services/` except any tiny stub you add for the template (e.g. none). Concretely remove (non-exhaustive but major):
+
+- [ ] Subscription & notifications: `subscriptionService`, `subscriptionNotificationService`, `scheduleNotificationService`, `notificationMetadataService`, `notificationPermissionService`, `backgroundFetchService`, `syncRescheduleReminders`.
+- [ ] **iCloud / sync pipeline:** `syncOrchestrator`, `syncTriggers`, `syncStatus`, `syncBackup`, `syncMerge`, `syncApplyAndUpload`, `syncBuildPayload`, `syncValidatePayload`, `syncDownloadFile`, `syncOnline`, `syncRetry`, `syncDeviceId`, `syncDeletedIds`, `syncErrorMessages`, and `src/types/sync.ts`.
+- [ ] **Purchases:** `purchaseService`, `purchaseIOSService`, `purchaseAndroidService`.
+- [ ] **Other:** `fxRatesService`, `settingsService`, `imageService`, `csvSubscriptionExport`, `customCategoryService`, `reportSummaryCache`, `analyticsService`.
+- [ ] Remove all `src/services/__tests__/*.test.ts` (they test deleted code).
+
+---
+
+## 5. Models and shared types
+
+- [ ] Delete `models/Subscription.ts` and any remaining references.
+- [ ] Trim `src/types/index.ts` to only types still used by the template (or delete the file if unused).
+- [ ] Search the repo for `Subscription`, `snapsub`, `SnapSub`, `SubTracker`, bundle IDs, and iCloud container strings; remove or replace with template placeholders.
+
+---
+
+## 6. `package.json` — identity and dependencies
+
+- [ ] Change `name` from `snapsub` to a neutral template name (e.g. `mobile-template`).
+- [ ] **Remove** dependencies that only served the old app (after code deletion), for example likely candidates:
+  - `@react-native-community/datetimepicker`, `@react-native-picker/picker`, `react-native-currency-input`, `react-native-wheely`, `react-native-popover-view`, `react-native-cloud-storage`, `react-native-iap`, `reanimated-color-picker`, `react-native-animated-numbers`, `lucide-react-native`, `react-native-svg` (if no icons left), `expo-notifications`, `expo-task-manager`, `expo-background-fetch`, `expo-image-picker`, `expo-image-manipulator`, `expo-device`, `expo-blur`, `expo-linear-gradient`, `expo-localization`, `@react-native-community/netinfo` — only remove after confirming zero imports.
+- [ ] **Re-evaluate** `expo-build-properties` and `./plugins/withFmtCpp17Podfile.js`: remove if they only existed for the old native build (C++17 / RN from source); simplify `app.json` plugins accordingly.
+- [ ] Keep core: `expo`, `react`, `react-native`, `react-native-gesture-handler`, `react-native-safe-area-context`, `expo-status-bar`, TypeScript, Babel, ESLint (this template has no unit-test runner).
+- [ ] Run `npm install` (or `yarn`/`pnpm`) after edits and fix peer warnings.
+
+---
+
+## 7. Expo config (`app.json`)
+
+- [ ] Set neutral `expo.name`, `expo.slug`, `expo.scheme`, `expo.version` for a template.
+- [ ] Replace **iOS** `bundleIdentifier` and **Android** `package` with placeholder values you own (not `com.subtrackalltheway.app` / `com.anonymous.SnapSub`).
+- [ ] **Remove iCloud** from `ios.entitlements` (`com.apple.developer.ubiquity-container-identifiers`) unless the template explicitly documents iCloud.
+- [ ] Remove or narrow **iOS `UIBackgroundModes`** (`fetch`) if background fetch is removed.
+- [ ] **Android permissions:** remove `RECEIVE_BOOT_COMPLETED`, `SCHEDULE_EXACT_ALARM` if notifications / exact alarms are gone.
+- [ ] **Plugins:** remove `react-native-iap`, `react-native-cloud-storage`, `expo-notifications` (and its icon/color block), `@react-native-community/datetimepicker` if unused; remove `expo-notifications`-related asset references.
+- [ ] Revisit `assetBundlePatterns` (`**/*`) — optional tighten to `./assets/*` for clarity.
+- [ ] Run `npx expo prebuild --clean` when you change native plugins/permissions (after regenerating `ios`/`android` if you use prebuild).
+
+---
+
+## 8. Assets and branding
+
+- [ ] Replace `assets/icon.png`, `assets/adaptive-icon.png`, `assets/splash.png`, and `assets/favicon.png` with generic template artwork (or keep simple colored placeholders).
+- [ ] Ensure `app.json` `splash` / `icon` paths match existing files (no broken references).
+
+---
+
+## 9. Tooling: Babel, TypeScript, ESLint
+
+- [ ] **Babel:** if `@/` alias is unused, remove `babel-plugin-module-resolver` and the alias block from `babel.config.js`; keep `babel-preset-expo` (and `react-native-reanimated/plugin` last if you add Reanimated). Remove `nativewind/babel` if NativeWind is removed.
+- [ ] **TypeScript:** remove `paths` `@/*` from `tsconfig.json` if unused; keep `strict` as desired.
+- [ ] **Coverage:** delete any committed `coverage/` folder; `coverage/` is in `.gitignore` if you add a test runner later.
+- [ ] **ESLint:** extend `ignores` if you add generated folders; no change needed if structure stays simple.
+
+---
+
+## 10. Repo hygiene (non-source)
+
+- [ ] Remove or relocate `appBrainstormsPlan/` (planning docs — not part of the template app).
+- [ ] Remove `resources/exchange-rate.json` if nothing reads it.
+- [ ] Update **README.md** from “SubTracker / subscription app” to template instructions: prerequisites, `npm install`, `npx expo start`, prebuild/EAS notes, and list of intentionally kept stacks (e.g. Reanimated, NativeWind).
+
+---
+
+## 11. Native projects and CI
+
+- [ ] If `ios/` and `android/` exist locally (often gitignored), regenerate with `expo prebuild` after `app.json` cleanup so entitlements, plugins, and package names align.
+- [ ] If you use EAS Build or CI, update profiles, credentials, and bundle IDs to match the new identifiers.
+
+---
+
+## 12. Verification checklist (must pass before calling “done”)
+
+- [ ] `npx tsc --noEmit` (or `expo`’s recommended typecheck) — zero errors.
+- [ ] `npx eslint .` (or your script) — clean or only acceptable baseline warnings.
+- [ ] `npx expo start` — bundle loads; no red box; no missing-module errors.
+- [ ] Optional: `npx expo run:ios` / `run:android` on a clean prebuild to verify native modules match `package.json` and `app.json`.
+
+---
+
+## 13. Optional follow-ups (not required for “empty”)
+
+- [ ] Add a single navigation library (`@react-navigation/native` + stack) if you want a structural template rather than one screen.
+- [ ] Add `.env.example` and `app.config.ts` if future apps need environment-based config.
+- [ ] Pin Expo SDK and React Native versions explicitly in README for reproducibility.
+
+---
+
+## Summary map (what currently ties everything together)
+
+| Area            | Current role |
+|-----------------|--------------|
+| `App.tsx`       | Root state, all screens, modals, sync/purchase/currency/notifications init |
+| `index.ts`      | Registers background fetch task via import |
+| `app.json`      | SnapSub branding, iCloud, IAP, notifications, datetime plugin, build-properties |
+| `src/services/` | Sync, notifications, purchases, FX, reports, CSV, analytics |
+| `src/lib/storage.tsx` | MMKV + sync key callback wiring |
+| `models/`       | Subscription domain model |
+
+Stripping the rows above to a minimal shell and aligning config + dependencies completes the cleanup.
